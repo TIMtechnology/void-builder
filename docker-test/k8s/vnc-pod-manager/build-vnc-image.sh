@@ -10,6 +10,12 @@ IMAGE_NAME="vnc/void-desktop"
 IMAGE_TAG="latest"
 DOCKERFILE_PATH="../../Dockerfile"
 
+# Check for --no-cache parameter
+NO_CACHE=""
+if [[ "$1" == "--no-cache" ]]; then
+    NO_CACHE="--no-cache"
+fi
+
 # Nexus registry credentials
 NEXUS_USER="admin"
 NEXUS_PASSWORD="thinkgs123"
@@ -68,14 +74,18 @@ if [ ! -f "${DOCKERFILE_PATH}" ]; then
 fi
 
 # Build the VNC image
-print_info "Building VNC Desktop image for linux/amd64..."
+if [ -n "${NO_CACHE}" ]; then
+    print_info "Building VNC Desktop image for linux/amd64 with --no-cache (forcing rebuild to get latest Void version)..."
+else
+    print_info "Building VNC Desktop image for linux/amd64..."
+fi
 print_info "Using Dockerfile: ${DOCKERFILE_PATH}"
 
 # Get the directory containing the Dockerfile
 DOCKER_CONTEXT=$(dirname "${DOCKERFILE_PATH}")
 
 # Build the image
-docker build ${BUILD_PLATFORM} \
+docker build ${BUILD_PLATFORM} ${NO_CACHE} \
     -t ${DOCKER_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG} \
     -f ${DOCKERFILE_PATH} \
     ${DOCKER_CONTEXT}

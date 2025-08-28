@@ -84,14 +84,16 @@ build_and_push_image() {
     docker push ${DOCKER_REGISTRY}/vnc/manager-api:${IMAGE_TAG}
     
     # Build VNC image using the dedicated script
-    print_info "Building VNC image..."
+    print_info "Building VNC image (forcing rebuild to get latest Void version)..."
     if [ -f "./build-vnc-image.sh" ]; then
-        ./build-vnc-image.sh
+        # Modify build-vnc-image.sh to add --no-cache if it exists
+        ./build-vnc-image.sh --no-cache
     else
         print_warn "build-vnc-image.sh not found, trying direct build..."
         if [ -f "../../Dockerfile" ]; then
-            print_info "Building VNC image for linux/amd64..."
-            (cd ../.. && docker build ${BUILD_PLATFORM} -t ${DOCKER_REGISTRY}/vnc/void-desktop:${IMAGE_TAG} -f Dockerfile .)
+            print_info "Building VNC image for linux/amd64 with --no-cache to ensure latest Void version..."
+            # Use --no-cache to force rebuild and get latest Void version from GitHub API
+            (cd ../.. && docker build --no-cache ${BUILD_PLATFORM} -t ${DOCKER_REGISTRY}/vnc/void-desktop:${IMAGE_TAG} -f Dockerfile .)
             docker push ${DOCKER_REGISTRY}/vnc/void-desktop:${IMAGE_TAG}
         fi
     fi
@@ -140,7 +142,7 @@ deploy_application() {
 update_application() {
     print_info "Updating application..."
     
-    # Build and push new image
+    # Build and push new image (with force rebuild for VNC image)
     build_and_push_image
     
     # Update ConfigMap if changed
@@ -148,6 +150,10 @@ update_application() {
     
     # Restart deployment to pull new image
     kubectl rollout restart deployment/vnc-manager-api -n ${NAMESPACE_SYSTEM}
+    
+    # Also delete existing VNC pods to force them to use the new image
+    print_info "Deleting existing VNC pods to force update..."
+    kubectl delete pods -n ${NAMESPACE_PODS} --all --ignore-not-found=true || true
     
     # Wait for rollout to complete
     kubectl rollout status deployment/vnc-manager-api -n ${NAMESPACE_SYSTEM} --timeout=120s
