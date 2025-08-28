@@ -81,8 +81,8 @@ class TokenManager:
         # Build user info
         user_info = {
             "user_id": str(user_data["user_id"]),  # Convert to string for consistency
-            "username": user_data.get("username", ""),
-            "nickname": user_data.get("nickname", ""),
+            "username": user_data.get("user_name", ""),  # Fixed field name from database
+            "nickname": user_data.get("nick_name", ""),  # Fixed field name from database
             "token_hash": token_hash,
             "permissions": ["vnc", "ssh", "novnc"],  # Default permissions
             "resource_quota": self.db_manager.get_user_resource_quota(user_data["user_id"]),

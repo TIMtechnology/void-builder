@@ -101,10 +101,11 @@ RUN mkdir -p /var/run/sshd && \
     sed -i 's/UsePAM yes/UsePAM no/' /etc/ssh/sshd_config && \
     echo "void:void" | chpasswd
 
-# Download and install Void
-ARG VOID_VERSION=1.99.30044
-RUN wget -O /tmp/void.deb https://github.com/TIMtechnology/binaries/releases/download/${VOID_VERSION}/void_${VOID_VERSION}_amd64.deb && \
-    apt-get update && \
+# Download and install Void (latest version from GitHub)
+RUN apt-get update && apt-get install -y jq && \
+    VOID_VERSION=$(curl -s https://api.github.com/repos/qinkee/binaries/releases/latest | jq -r '.tag_name') && \
+    echo "Installing Void version: ${VOID_VERSION}" && \
+    wget -O /tmp/void.deb "https://github.com/qinkee/binaries/releases/download/${VOID_VERSION}/void_${VOID_VERSION}_amd64.deb" && \
     apt-get install -y /tmp/void.deb || true && \
     apt-get install -f -y && \
     rm /tmp/void.deb && \
@@ -270,8 +271,38 @@ if start_vnc; then\n\
     # Start void if VOID_SK_TOKEN is provided\n\
     if [ ! -z "$VOID_SK_TOKEN" ]; then\n\
         echo "Starting Void with provided token..."\n\
-        su - void -c "DISPLAY=:1 /usr/share/void/void --skToken '$VOID_SK_TOKEN' --no-sandbox --disable-gpu-sandbox > /tmp/void.log 2>&1 &"\n\
-        echo "Void started with token"\n\
+        # Debug: Print token info\n\
+        TOKEN_LENGTH=${#VOID_SK_TOKEN}\n\
+        echo "Token length: $TOKEN_LENGTH"\n\
+        if [ "$TOKEN_LENGTH" -gt 10 ]; then\n\
+            echo "Token starts with: ${VOID_SK_TOKEN:0:10}..."\n\
+        fi\n\
+        \n\
+        # Create a script to start void with proper environment\n\
+        cat > /tmp/start_void.sh << EOFSCRIPT\n\
+#!/bin/bash\n\
+export DISPLAY=:1\n\
+export VOID_SK_TOKEN="$VOID_SK_TOKEN"\n\
+echo "Starting void with token: \${VOID_SK_TOKEN:0:10}..."\n\
+/usr/share/void/void --skToken "\$VOID_SK_TOKEN" --no-sandbox --disable-gpu-sandbox > /tmp/void.log 2>&1\n\
+EOFSCRIPT\n\
+        chmod +x /tmp/start_void.sh\n\
+        \n\
+        # Start void as the void user\n\
+        su - void -c "/tmp/start_void.sh &"\n\
+        \n\
+        # Wait and check if void started\n\
+        sleep 3\n\
+        if pgrep -f "/usr/share/void/void" > /dev/null; then\n\
+            echo "Void process started successfully"\n\
+        else\n\
+            echo "WARNING: Void process may have failed to start"\n\
+            echo "Check /tmp/void.log for details"\n\
+            if [ -f /tmp/void.log ]; then\n\
+                echo "First 10 lines of void.log:"\n\
+                head -10 /tmp/void.log\n\
+            fi\n\
+        fi\n\
     else\n\
         echo "VOID_SK_TOKEN not provided, Void needs to be started manually"\n\
     fi\n\

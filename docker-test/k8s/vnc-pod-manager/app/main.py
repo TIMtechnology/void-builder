@@ -183,7 +183,6 @@ async def readiness_check():
 @app.post("/api/v1/pods")
 async def create_pod(
     background_tasks: BackgroundTasks,
-    authorization: str = Header(None),
     user_info: dict = Depends(get_current_user),
     resource_quota: Optional[Dict[str, str]] = None
 ):
@@ -235,16 +234,31 @@ async def create_pod(
                 size=resource_quota.get("storage", settings.default_storage_size)
             )
             
-            # Extract the API token to pass to void
-            api_token = authorization
-            if authorization and authorization.startswith("Bearer "):
-                api_token = authorization[7:]
+            # Get the actual user token from database using user_info
+            # user_info contains db_user_id which is the actual integer ID in database
+            from app.core.database import get_db_manager
+            db_manager = get_db_manager()
+            
+            # Get user's actual token from database
+            db_user_id = user_info.get("db_user_id")
+            if db_user_id:
+                api_token = db_manager.get_user_token_by_id(db_user_id)
+                if api_token:
+                    logger.info(f"Retrieved user token from database for user ID: {db_user_id}")
+                    logger.info(f"Token length: {len(api_token)}, starts with: {api_token[:10]}...")
+                else:
+                    logger.warning(f"Could not retrieve token from database for user ID: {db_user_id}")
+                    api_token = None
+            else:
+                logger.warning("No db_user_id found in user_info")
+                logger.warning(f"user_info keys: {user_info.keys()}")
+                api_token = None
             
             # Create the VNC Pod with VNC password and API token
             pod = k8s_manager.create_vnc_pod(
                 user_id=user_id,
                 token=vnc_password,  # Use generated VNC password
-                api_token=api_token,  # Pass API token for void
+                api_token=api_token,  # Pass API token for void (from database)
                 resource_quota=resource_quota
             )
             

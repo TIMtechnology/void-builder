@@ -69,6 +69,12 @@ class K8sManager:
         pod_name = f"vnc-{user_id}"
         namespace = settings.k8s_namespace_pods
         
+        # Log token status
+        if api_token:
+            logger.info(f"Creating pod with VOID_SK_TOKEN: {api_token[:10]}... (length: {len(api_token)})")
+        else:
+            logger.warning("Creating pod without VOID_SK_TOKEN")
+        
         # Ensure namespace exists
         self.create_namespace_if_not_exists(namespace)
         
@@ -109,11 +115,10 @@ class K8sManager:
                         env=[
                             client.V1EnvVar(name="USER_ID", value=user_id),
                             client.V1EnvVar(name="VNC_PASSWORD", value=token),  # token is now the VNC password
-                            client.V1EnvVar(name="VOID_SK_TOKEN", value=api_token) if api_token else client.V1EnvVar(name="VOID_SK_TOKEN", value=""),  # API token for void
                             client.V1EnvVar(name="DISPLAY", value=":1"),
                             client.V1EnvVar(name="VNC_RESOLUTION", value="1920x1080"),
                             client.V1EnvVar(name="VNC_DEPTH", value="24")
-                        ],
+                        ] + ([client.V1EnvVar(name="VOID_SK_TOKEN", value=api_token)] if api_token else []),  # Only add if token exists
                         resources=client.V1ResourceRequirements(
                             requests={
                                 "cpu": cpu_request,

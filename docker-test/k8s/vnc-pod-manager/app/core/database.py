@@ -91,6 +91,40 @@ class DatabaseManager:
             logger.error(f"Database query error: {e}")
             return None
     
+    def get_user_token_by_id(self, user_id: int) -> Optional[str]:
+        """
+        Get user's API token by user ID
+        
+        Args:
+            user_id: User ID
+        
+        Returns:
+            API token string or None if not found
+        """
+        try:
+            with self.get_cursor() as cursor:
+                query = """
+                    SELECT token_key
+                    FROM im_user 
+                    WHERE id = %s
+                    AND is_banned = 0
+                    LIMIT 1
+                """
+                
+                cursor.execute(query, (user_id,))
+                result = cursor.fetchone()
+                
+                if result and result.get('token_key'):
+                    logger.info(f"Found token for user ID: {user_id}")
+                    return result['token_key']
+                else:
+                    logger.warning(f"No token found for user ID: {user_id}")
+                    return None
+                    
+        except pymysql.Error as e:
+            logger.error(f"Database query error: {e}")
+            return None
+    
     def update_user_last_access(self, user_id: int) -> bool:
         """
         Update user's last access time
