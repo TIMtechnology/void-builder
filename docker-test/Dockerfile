@@ -112,6 +112,15 @@ RUN apt-get update && apt-get install -y jq && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
+# Download and install IM components
+RUN echo "Downloading and installing IM components..." && \
+    wget -O /tmp/im-components.tar.gz https://aiim.service.thinkgs.cn/im-components/im-components.tar.gz && \
+    mkdir -p /usr/share/void/resources/app/out/vs/code/electron-sandbox/workbench && \
+    rm -rf /usr/share/void/resources/app/out/vs/code/electron-sandbox/workbench/im-components && \
+    tar -xzf /tmp/im-components.tar.gz -C /usr/share/void/resources/app/out/vs/code/electron-sandbox/workbench/ && \
+    rm /tmp/im-components.tar.gz && \
+    echo "IM components installed successfully"
+
 # Setup VNC - password will be set at runtime from environment variable
 USER void
 RUN mkdir -p /home/void/.vnc
