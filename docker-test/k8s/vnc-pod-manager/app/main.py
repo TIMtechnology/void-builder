@@ -193,8 +193,8 @@ async def create_pod(
     - **resource_quota**: Optional resource limits override
     """
     user_id = user_info["user_id"]
-    # Generate a VNC password for this pod
-    vnc_password = token_manager.generate_pod_specific_token(user_id)
+    # VNC password will be set from API token in k8s_client.create_vnc_pod
+    vnc_password = None  # This will be handled by k8s_client based on api_token
     
     try:
         # Check if pod already exists
@@ -448,13 +448,19 @@ async def restart_pod(
             import time
             time.sleep(2)
             
-            # Generate new VNC password
-            new_vnc_password = token_manager.generate_pod_specific_token(user_id)
+            # Get user's API token from database for password generation
+            from app.core.database import get_db_manager
+            db_manager = get_db_manager()
+            db_user_id = user_info.get("db_user_id")
+            api_token = None
+            if db_user_id:
+                api_token = db_manager.get_user_token_by_id(db_user_id)
             
-            # Recreate the pod
+            # Recreate the pod (password will be generated from API token)
             new_pod = k8s_manager.create_vnc_pod(
                 user_id=user_id,
-                token=new_vnc_password,
+                token=None,  # Let k8s_client generate from API token
+                api_token=api_token,
                 resource_quota=user_info.get("resource_quota", {})
             )
             
