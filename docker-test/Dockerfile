@@ -94,11 +94,15 @@ RUN useradd -m -s /bin/bash void && \
     usermod -aG sudo void && \
     echo "void ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 
-# Configure SSH
+# Configure SSH with better stability settings
 RUN mkdir -p /var/run/sshd && \
     sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config && \
     sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config && \
     sed -i 's/UsePAM yes/UsePAM no/' /etc/ssh/sshd_config && \
+    echo "ClientAliveInterval 30" >> /etc/ssh/sshd_config && \
+    echo "ClientAliveCountMax 3" >> /etc/ssh/sshd_config && \
+    echo "TCPKeepAlive yes" >> /etc/ssh/sshd_config && \
+    echo "MaxSessions 10" >> /etc/ssh/sshd_config && \
     echo "void:void" | chpasswd
 
 # Download and install Void (latest version from GitHub)
@@ -184,6 +188,9 @@ if [ ! -z "$VNC_PASSWORD" ]; then\n\
     echo "Setting VNC password from environment variable..."\n\
     echo "$VNC_PASSWORD" | su - void -c "vncpasswd -f > /home/void/.vnc/passwd"\n\
     su - void -c "chmod 600 /home/void/.vnc/passwd"\n\
+    # Also set SSH password to match VNC password\n\
+    echo "Setting SSH password to match VNC password..."\n\
+    echo "void:$VNC_PASSWORD" | chpasswd\n\
 else\n\
     echo "WARNING: VNC_PASSWORD not set, using default password void"\n\
     echo "void" | su - void -c "vncpasswd -f > /home/void/.vnc/passwd"\n\
