@@ -201,8 +201,15 @@ async def create_pod(
         # Check if pod already exists
         existing_pod = k8s_manager.get_pod(f"vnc-{user_id}")
         if existing_pod and existing_pod.status.phase in ["Running", "Pending"]:
+            # Get cached password if available
+            cached_pod_info = redis_client.get(f"pod:{user_id}")
+            cached_password = None
+            if cached_pod_info:
+                pod_data = json.loads(cached_pod_info)
+                cached_password = pod_data.get("vnc_password")
+            
             # Get access info
-            access_info = ingress_manager.get_pod_access_info(user_id, settings.vnc_domain)
+            access_info = ingress_manager.get_pod_access_info(user_id, settings.vnc_domain, cached_password)
             return {
                 "status": "exists",
                 "message": "Pod already exists and is running",
@@ -217,7 +224,14 @@ async def create_pod(
             # Double-check after acquiring lock
             existing_pod = k8s_manager.get_pod(f"vnc-{user_id}")
             if existing_pod and existing_pod.status.phase in ["Running", "Pending"]:
-                access_info = ingress_manager.get_pod_access_info(user_id, settings.vnc_domain)
+                # Get cached password if available
+                cached_pod_info = redis_client.get(f"pod:{user_id}")
+                cached_password = None
+                if cached_pod_info:
+                    pod_data = json.loads(cached_pod_info)
+                    cached_password = pod_data.get("vnc_password")
+                
+                access_info = ingress_manager.get_pod_access_info(user_id, settings.vnc_domain, cached_password)
                 return {
                     "status": "exists",
                     "message": "Pod already exists",
@@ -285,8 +299,8 @@ async def create_pod(
             # Add SSH proxy configuration
             ssh_info = tcp_proxy_manager.add_ssh_proxy(user_id)
             
-            # Get access information
-            access_info = ingress_manager.get_pod_access_info(user_id, settings.vnc_domain)
+            # Get access information with password for auto-login
+            access_info = ingress_manager.get_pod_access_info(user_id, settings.vnc_domain, vnc_password)
             # Add SSH info to access_info
             access_info["ssh"] = ssh_info
             
@@ -413,8 +427,15 @@ async def get_pod_status(
         if not status:
             raise HTTPException(status_code=404, detail="Pod not found")
         
+        # Get cached password if available
+        cached_pod_info = redis_client.get(f"pod:{user_id}")
+        cached_password = None
+        if cached_pod_info:
+            pod_data = json.loads(cached_pod_info)
+            cached_password = pod_data.get("vnc_password")
+        
         # Add access info
-        access_info = ingress_manager.get_pod_access_info(user_id, settings.vnc_domain)
+        access_info = ingress_manager.get_pod_access_info(user_id, settings.vnc_domain, cached_password)
         status["access_info"] = access_info
         
         return status
@@ -570,10 +591,8 @@ async def list_user_pods(user_info: dict = Depends(get_current_user)):
         raise HTTPException(status_code=500, detail=str(e))
 
 # Import additional modules
-import json
 import prometheus_client
 from prometheus_client import Counter, Histogram, Gauge
-import time
 
 # Metrics
 pod_creation_counter = Counter('vnc_pod_creations_total', 'Total number of pod creation attempts')

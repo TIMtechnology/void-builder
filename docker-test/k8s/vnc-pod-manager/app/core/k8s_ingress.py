@@ -244,7 +244,7 @@ class K8sIngressManager:
         except Exception as e:
             logger.warning(f"Failed to remove SSH proxy for user {user_id}: {e}")
     
-    def get_pod_access_info(self, user_id: str, domain: str = "vnc.service.thinkgs.cn") -> Dict[str, Any]:
+    def get_pod_access_info(self, user_id: str, domain: str = "vnc.service.thinkgs.cn", vnc_password: str = None) -> Dict[str, Any]:
         """
         Get access information for a user's pod with both VNC and SSH access
         
@@ -261,12 +261,24 @@ class K8sIngressManager:
         # Get SSH proxy information
         ssh_info = self.tcp_proxy.add_ssh_proxy(user_id)
         
+        # Build noVNC URL with optional password parameter for auto-login
+        novnc_base_url = f"{base_url}/user/{user_id}/vnc.html?path=user/{user_id}/websockify"
+        if vnc_password:
+            # Add password parameter for auto-login
+            # Note: The password will be URL encoded and passed as a parameter
+            import urllib.parse
+            encoded_password = urllib.parse.quote(vnc_password)
+            novnc_url_with_auth = f"{novnc_base_url}&password={encoded_password}&autoconnect=true"
+        else:
+            novnc_url_with_auth = novnc_base_url
+        
         return {
             "vnc": {
-                "novnc_url": f"{base_url}/user/{user_id}/vnc.html?path=user/{user_id}/websockify",
+                "novnc_url": novnc_url_with_auth,
+                "novnc_url_no_auth": novnc_base_url,  # URL without password for manual login
                 "websocket_url": f"ws://{domain}/user/{user_id}/websockify",
                 "vnc_direct_url": f"{base_url}/user/{user_id}/vnc",
-                "access_instructions": f"Open {base_url}/user/{user_id}/vnc.html?path=user/{user_id}/websockify in your browser"
+                "access_instructions": f"Open the novnc_url in your browser for automatic login"
             },
             "ssh": {
                 "port": ssh_info["ssh_port"],
@@ -277,7 +289,7 @@ class K8sIngressManager:
             },
             "credentials": {
                 "username": "void",
-                "password": "Use the password provided when creating the pod"
+                "password": vnc_password if vnc_password else "Use the password provided when creating the pod"
             }
         }
     

@@ -148,17 +148,48 @@ update_application() {
     # Update ConfigMap if changed
     kubectl apply -f k8s/configmap.yaml
     
-    # Restart deployment to pull new image
+    # Option 1: Using kubectl to restart deployment
+    print_info "Restarting deployment using kubectl..."
     kubectl rollout restart deployment/vnc-manager-api -n ${NAMESPACE_SYSTEM}
     
+    # Option 2: Using Kuboard API to restart deployment (if kubectl fails)
+    # Uncomment below if you prefer to use Kuboard API
+    restart_via_kuboard
+    
     # Also delete existing VNC pods to force them to use the new image
-    print_info "Deleting existing VNC pods to force update..."
-    kubectl delete pods -n ${NAMESPACE_PODS} --all --ignore-not-found=true || true
+    # print_info "Deleting existing VNC pods to force update..."
+    # kubectl delete pods -n ${NAMESPACE_PODS} --all --ignore-not-found=true || true
     
-    # Wait for rollout to complete
-    kubectl rollout status deployment/vnc-manager-api -n ${NAMESPACE_SYSTEM} --timeout=120s
+    # # Wait for rollout to complete
+    # kubectl rollout status deployment/vnc-manager-api -n ${NAMESPACE_SYSTEM} --timeout=120s
     
-    print_info "Application updated successfully"
+    # print_info "Application updated successfully"
+}
+
+restart_via_kuboard() {
+    print_info "Restarting deployment via Kuboard API..."
+    
+    # Kuboard API configuration
+    KUBOARD_URL="http://192.168.10.180/kuboard-api"
+    KUBOARD_USERNAME="admin"
+    KUBOARD_ACCESS_KEY="rjdaexdscf73.8dayzm32rmmj2zfrdnw6fmmaeeedrafh"
+    
+    # Call Kuboard API to restart deployment
+    RESPONSE=$(curl -s -w "\n%{http_code}" -X PUT \
+        -H "Content-Type: application/yaml" \
+        -H "Cookie: KuboardUsername=${KUBOARD_USERNAME}; KuboardAccessKey=${KUBOARD_ACCESS_KEY}" \
+        -d '{"kind":"deployments","namespace":"vnc-system","name":"vnc-manager-api"}' \
+        "${KUBOARD_URL}/cluster/default/kind/CICDApi/admin/resource/restartWorkload")
+    
+    HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+    BODY=$(echo "$RESPONSE" | head -n-1)
+    
+    if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "201" ] || [ "$HTTP_CODE" = "202" ]; then
+        print_info "Deployment restarted via Kuboard successfully (HTTP ${HTTP_CODE})"
+    else
+        print_warn "Failed to restart via Kuboard (HTTP ${HTTP_CODE}), falling back to kubectl"
+        kubectl rollout restart deployment/vnc-manager-api -n ${NAMESPACE_SYSTEM}
+    fi
 }
 
 delete_deployment() {
