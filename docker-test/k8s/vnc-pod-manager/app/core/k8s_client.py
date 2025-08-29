@@ -69,16 +69,15 @@ class K8sManager:
         pod_name = f"vnc-{user_id}"
         namespace = settings.k8s_namespace_pods
         
-        # Generate VNC/SSH password from API token (last 12 characters)
-        # Priority: 1. Use API token's last 12 chars if available
-        #           2. Use provided token if API token not available
-        #           3. Generate random password as fallback
-        if api_token and len(api_token) >= 12:
-            vnc_password = api_token[-12:]
-        elif token:
+        # Use provided token as VNC/SSH password
+        # The token should already be calculated from API token's last 12 chars in main.py
+        if token:
             vnc_password = token
+        elif api_token and len(api_token) >= 12:
+            # Fallback: calculate from API token if token not provided
+            vnc_password = api_token[-12:]
         else:
-            # Fallback: generate a simple password if neither is available
+            # Last resort: generate a simple password
             import secrets
             vnc_password = secrets.token_urlsafe(6)[:8]
         

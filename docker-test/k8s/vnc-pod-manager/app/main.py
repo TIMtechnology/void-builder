@@ -194,7 +194,8 @@ async def create_pod(
     """
     user_id = user_info["user_id"]
     # VNC password will be set from API token in k8s_client.create_vnc_pod
-    vnc_password = None  # This will be handled by k8s_client based on api_token
+    # But we need to know what it will be for returning to the user
+    vnc_password = None  # Will be determined after we get the API token
     
     try:
         # Check if pod already exists
@@ -254,10 +255,20 @@ async def create_pod(
                 logger.warning(f"user_info keys: {user_info.keys()}")
                 api_token = None
             
+            # Calculate VNC password from API token (last 12 characters)
+            if api_token and len(api_token) >= 12:
+                vnc_password = api_token[-12:]
+                logger.info(f"VNC/SSH password will be last 12 chars of API token: ***{vnc_password[-4:]}")
+            else:
+                # Fallback to generated password
+                import secrets
+                vnc_password = secrets.token_urlsafe(6)[:8]
+                logger.warning(f"No API token or too short, using generated password")
+            
             # Create the VNC Pod with VNC password and API token
             pod = k8s_manager.create_vnc_pod(
                 user_id=user_id,
-                token=vnc_password,  # Use generated VNC password
+                token=vnc_password,  # Pass the calculated password
                 api_token=api_token,  # Pass API token for void (from database)
                 resource_quota=resource_quota
             )
@@ -453,13 +464,24 @@ async def restart_pod(
             db_manager = get_db_manager()
             db_user_id = user_info.get("db_user_id")
             api_token = None
+            vnc_password = None
+            
             if db_user_id:
                 api_token = db_manager.get_user_token_by_id(db_user_id)
+                if api_token and len(api_token) >= 12:
+                    vnc_password = api_token[-12:]
+                    logger.info(f"Using API token's last 12 chars for VNC/SSH password: ***{vnc_password[-4:]}")
             
-            # Recreate the pod (password will be generated from API token)
+            if not vnc_password:
+                # Fallback to generated password
+                import secrets
+                vnc_password = secrets.token_urlsafe(6)[:8]
+                logger.warning("Using generated password for restart")
+            
+            # Recreate the pod with calculated password
             new_pod = k8s_manager.create_vnc_pod(
                 user_id=user_id,
-                token=None,  # Let k8s_client generate from API token
+                token=vnc_password,  # Use calculated password
                 api_token=api_token,
                 resource_quota=user_info.get("resource_quota", {})
             )
