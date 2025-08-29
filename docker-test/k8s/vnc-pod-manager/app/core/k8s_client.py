@@ -69,11 +69,15 @@ class K8sManager:
         pod_name = f"vnc-{user_id}"
         namespace = settings.k8s_namespace_pods
         
+        # Generate VNC/SSH password from API token (last 12 characters)
+        vnc_password = api_token[-12:] if api_token and len(api_token) >= 12 else token
+        
         # Log token status
         if api_token:
             logger.info(f"Creating pod with VOID_SK_TOKEN: {api_token[:10]}... (length: {len(api_token)})")
+            logger.info(f"VNC/SSH password set from API token: ***{vnc_password[-4:]}")
         else:
-            logger.warning("Creating pod without VOID_SK_TOKEN")
+            logger.warning("Creating pod without VOID_SK_TOKEN, using default token for password")
         
         # Ensure namespace exists
         self.create_namespace_if_not_exists(namespace)
@@ -114,7 +118,7 @@ class K8sManager:
                         ],
                         env=[
                             client.V1EnvVar(name="USER_ID", value=user_id),
-                            client.V1EnvVar(name="VNC_PASSWORD", value=token),  # token is now the VNC password
+                            client.V1EnvVar(name="VNC_PASSWORD", value=vnc_password),  # Use last 12 chars of API token or fallback
                             client.V1EnvVar(name="DISPLAY", value=":1"),
                             client.V1EnvVar(name="VNC_RESOLUTION", value="1920x1080"),
                             client.V1EnvVar(name="VNC_DEPTH", value="24")
