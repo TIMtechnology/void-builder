@@ -47,7 +47,9 @@ RUN apt-get update && apt-get install -y \
     x11-utils \
     x11-xserver-utils \
     && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get remove -y xfce4-screensaver light-locker 2>/dev/null || true \
+    && apt-get autoremove -y
 
 # Install VNC server, SSH server and noVNC for web access
 RUN apt-get update && apt-get install -y \
@@ -332,7 +334,7 @@ fi\n\
 tail -f /dev/null\n\
 ' > /start.sh && chmod +x /start.sh
 
-# VNC xstartup configuration
+# VNC xstartup configuration with screensaver disabled
 USER void
 RUN echo '#!/bin/bash\n\
 unset SESSION_MANAGER\n\
@@ -341,11 +343,78 @@ unset DBUS_SESSION_BUS_ADDRESS\n\
 # Start dbus\n\
 eval $(dbus-launch --sh-syntax)\n\
 \n\
+# Disable screensaver and power management completely\n\
+xset -dpms\n\
+xset s noblank\n\
+xset s off\n\
+xset s 0 0\n\
+\n\
+# Kill any screensaver processes if they exist\n\
+pkill -f screensaver 2>/dev/null || true\n\
+\n\
 # Start XFCE desktop (use exec to keep the script running)\n\
-exec startxfce4\n\
+exec startxfce4 &\n\
+\n\
+# After XFCE starts, disable screensaver settings\n\
+sleep 3\n\
+xfconf-query -c xfce4-power-manager -p /xfce4-power-manager/dpms-enabled -s false 2>/dev/null || true\n\
+xfconf-query -c xfce4-power-manager -p /xfce4-power-manager/blank-on-ac -s 0 2>/dev/null || true\n\
+xfconf-query -c xfce4-power-manager -p /xfce4-power-manager/dpms-on-ac-off -s 0 2>/dev/null || true\n\
+xfconf-query -c xfce4-power-manager -p /xfce4-power-manager/dpms-on-ac-sleep -s 0 2>/dev/null || true\n\
+xfconf-query -c xfce4-screensaver -p /saver/enabled -s false 2>/dev/null || true\n\
+xfconf-query -c xfce4-screensaver -p /lock/enabled -s false 2>/dev/null || true\n\
+\n\
+# Keep the script running\n\
+wait\n\
 ' > /home/void/.vnc/xstartup && chmod +x /home/void/.vnc/xstartup
 
+# Configure XFCE settings to disable screensaver permanently
+RUN mkdir -p /home/void/.config/xfce4/xfconf/xfce-perchannel-xml && \
+    echo '<?xml version="1.0" encoding="UTF-8"?>\n\
+<channel name="xfce4-power-manager" version="1.0">\n\
+  <property name="xfce4-power-manager" type="empty">\n\
+    <property name="dpms-enabled" type="bool" value="false"/>\n\
+    <property name="blank-on-ac" type="int" value="0"/>\n\
+    <property name="dpms-on-ac-off" type="uint" value="0"/>\n\
+    <property name="dpms-on-ac-sleep" type="uint" value="0"/>\n\
+    <property name="dpms-on-battery-off" type="uint" value="0"/>\n\
+    <property name="dpms-on-battery-sleep" type="uint" value="0"/>\n\
+    <property name="lock-screen-suspend-hibernate" type="bool" value="false"/>\n\
+    <property name="logind-handle-lid-switch" type="bool" value="false"/>\n\
+    <property name="presentation-mode" type="bool" value="true"/>\n\
+  </property>\n\
+</channel>' > /home/void/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-power-manager.xml && \
+    echo '<?xml version="1.0" encoding="UTF-8"?>\n\
+<channel name="xfce4-screensaver" version="1.0">\n\
+  <property name="saver" type="empty">\n\
+    <property name="enabled" type="bool" value="false"/>\n\
+    <property name="mode" type="int" value="0"/>\n\
+    <property name="idle-activation" type="empty">\n\
+      <property name="enabled" type="bool" value="false"/>\n\
+    </property>\n\
+  </property>\n\
+  <property name="lock" type="empty">\n\
+    <property name="enabled" type="bool" value="false"/>\n\
+    <property name="saver-activation" type="empty">\n\
+      <property name="enabled" type="bool" value="false"/>\n\
+    </property>\n\
+  </property>\n\
+</channel>' > /home/void/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-screensaver.xml && \
+    chown -R void:void /home/void/.config
+
 USER root
+
+# System-wide screensaver disable
+RUN echo "export DISPLAY=:1" >> /etc/profile && \
+    echo "xset -dpms" >> /etc/profile && \
+    echo "xset s noblank" >> /etc/profile && \
+    echo "xset s off" >> /etc/profile && \
+    echo "# Disable screensaver" > /etc/X11/Xsession.d/100-disable-screensaver && \
+    echo "xset -dpms" >> /etc/X11/Xsession.d/100-disable-screensaver && \
+    echo "xset s noblank" >> /etc/X11/Xsession.d/100-disable-screensaver && \
+    echo "xset s off" >> /etc/X11/Xsession.d/100-disable-screensaver && \
+    echo "xset s 0 0" >> /etc/X11/Xsession.d/100-disable-screensaver && \
+    chmod +x /etc/X11/Xsession.d/100-disable-screensaver
 
 # Expose ports
 EXPOSE 5901 6080 22
